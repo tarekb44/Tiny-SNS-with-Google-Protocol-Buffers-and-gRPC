@@ -85,6 +85,7 @@ std::vector<Client*> client_db;
 class SNSServiceImpl final : public SNSService::Service {
 
   Client* getClient(const std::string& username) {
+    //iterate over all the clients, if there is a match return the pointer
     for (Client* client : client_db)
       if (client->username == username)
         return client;
@@ -92,8 +93,9 @@ class SNSServiceImpl final : public SNSService::Service {
     return nullptr;
   }
 
-  bool isFollowing(Client* client, Client* target) {
-    return std::find(client->client_following.begin(), client->client_following.end(), target) != client->client_following.end();
+  // helper functiion to determine if two client objects are the same
+  bool isFollowing(Client* c1, Client* c2) {
+    return std::find(c1->client_following.begin(), c1->client_following.end(), c2) != c1->client_following.end();
   }
 
   Status List(ServerContext* context, const Request* request, ListReply* list_reply) override {
@@ -107,17 +109,15 @@ class SNSServiceImpl final : public SNSService::Service {
       }
     }
 
-    if (c == nullptr) {
-      return Status(grpc::StatusCode::NOT_FOUND, "Client not found");
-    }
+    // no client
+    if (c == nullptr)
+      return Status::OK;
 
-    for (Client* client : client_db) {
+    // populate the all users, and follower db's to display
+    for (Client* client : client_db)
       list_reply->add_all_users(client->username);
-    }
-
-    for (Client* follower : c->client_followers) {
+    for (Client* follower : c->client_followers)
       list_reply->add_followers(follower->username);
-    }
 
     return Status::OK;
   }
@@ -230,36 +230,34 @@ class SNSServiceImpl final : public SNSService::Service {
 
   Status Timeline(ServerContext* context, ServerReaderWriter<Message, Message>* stream) override {
     Message message;
+    Client* c1 = nullptr;
 
-    // Read messages from the client
     while (stream->Read(&message))
     {
-      // Get the client who sent the message
-      Client* sender = getClient(message.username());
+      if (c1 == nullptr)
+      {
+        c1 = getClient(message.username());
 
-      if (sender == nullptr) {
-        continue; // If the sender is not found, skip processing
+        // if no sender found in the db, keep searching for a valid sender iwthin the network
+        if (c1 == nullptr)
+          continue;
+
+        // set the stream
+        c1->stream = stream;
       }
 
-      // Set the sender's stream
-      sender->stream = stream;
-
-      // Broadcast the message to all followers of the sender
-      for (Client* follower : sender->client_followers) {
-        if (follower->stream != nullptr) {
-          // Send the message to each follower
+      for (Client* follower : c1->client_followers) 
+        if (follower->stream != nullptr) // for each follower, broadcast the msg
           follower->stream->Write(message);
-        }
-      }
     }
 
-    // Clean up: remove the sender's stream when done
-    if (Client* sender = getClient(message.username())) {
-      sender->stream = nullptr;
-    }
+    // cleanup
+    if (c1 != nullptr)
+      c1->stream = nullptr;
 
     return Status::OK;
   }
+
 };
 
 void RunServer(std::string port_no) {

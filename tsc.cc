@@ -326,7 +326,8 @@ void Client::Timeline(const std::string& username) {
     Message server_msg;
     // get the message back from the server
     // infinite loop to read back from derver
-    while (stream->Read(&server_msg)) {
+    while (stream->Read(&server_msg)) 
+    {
       std::time_t time = static_cast<std::time_t>(server_msg.timestamp().seconds());
       displayPostMessage(server_msg.username(), server_msg.msg(), time);
     }
@@ -336,6 +337,8 @@ void Client::Timeline(const std::string& username) {
   // thread to send messages to the server
   std::thread writer([stream, this]() {
     // infinite loop to send the msgs
+    Message msg = MakeMessage(this->username, "Connected");
+    stream->Write(msg);
     while (true) {
       std::string message = getPostMessage();
       // use the message struct to define the username (which should be in the server db), 
@@ -347,16 +350,7 @@ void Client::Timeline(const std::string& username) {
 
   writer.join();
   reader.join();
-
-  // Finish the stream
-  //stream->WritesDone();
-  //grpc::Status status = stream->Finish();
-  //if (!status.ok()) {
-  //    std::cerr << "Timeline rpc failed." << std::endl;
-  //}
 }
-
-
 
 //////////////////////////////////////////////
 // Main Function
