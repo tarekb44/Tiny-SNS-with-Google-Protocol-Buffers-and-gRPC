@@ -77,7 +77,7 @@ int Client::connectTo() {
     if (ire.grpc_status.ok() && ire.comm_status == SUCCESS) {
         return 1;
     } else {
-        std::cout << "connection failed: " << ire.grpc_status.error_message() << std::endl;
+        // std::cout << "connection failed: " << ire.grpc_status.error_message() << std::endl;
         return -1;
     }
 }
@@ -133,34 +133,43 @@ IReply Client::processCommand(std::string& input)
 
     // std::cout << "Cmd" << input << std::endl;
 
-    std::string command, arg;
-    size_t space_pos = input.find(' ');
-    if (space_pos != std::string::npos)
-    {
-        command = input.substr(0, space_pos);
-        arg = input.substr(space_pos + 1);
-    } 
-    else 
-    {
-        command = input;
-        arg = "";
-    } 
+  std::string command, arg;
+  size_t space_pos = input.find(' ');
+  if (space_pos != std::string::npos)
+  {
+    // extract the command line args (e.g. FOLLOW <username>)
+    command = input.substr(0, space_pos);
+    arg = input.substr(space_pos + 1);
+  } 
+  else 
+  {
+    command = input;
+    arg = "";
+  } 
 
-    if (command == "FOLLOW")
-    { 
-      if (arg != "")
-        ire = Follow(arg);
-    } 
-    else if (command == "LIST") 
-    {
-      ire = List();
-    }
-    else if (command == "UNFOLLOW")
-    {
+  if (command == "FOLLOW")
+  { 
+    if (arg != "")
+      ire = Follow(arg);
+  } 
+  else if (command == "LIST") 
+  {
+    ire = List();
+  }
+  else if (command == "UNFOLLOW")
+  {
+    if (arg!= "")
       ire = UnFollow(arg);
-    }
+  }
+  else if (command == "TIMELINE")
+  {
+    processTimeline();
+    ire.comm_status = SUCCESS;
+  }
+  else 
+    ire.comm_status = FAILURE_UNKNOWN;
 
-    return ire;
+  return ire;
 }
 
 
@@ -173,59 +182,61 @@ void Client::processTimeline()
 IReply Client::List() {
   IReply ire;
   Request request;
+
   request.set_username(this->username);
 
   ListReply list_reply;
   ClientContext context;
 
+  // call the stub from the server for list
   grpc::Status status = stub_->List(&context, request, &list_reply);
 
+  // check this is a valdi response
   ire.grpc_status = status;
 
-  if (status.ok()) {
-      for (const auto& user : list_reply.all_users()) {
-          ire.all_users.push_back(user);
-      }
+  if (status.ok())
+  {
+    // populate the users that has been retrieved from the server
+    for (const auto& user : list_reply.all_users())
+      ire.all_users.push_back(user);
 
-      for (const auto& follower : list_reply.followers()) {
-          ire.followers.push_back(follower);
-      }
+    // populate the followers that has been retrieved from the server
+    for (const auto& follower : list_reply.followers()) 
+      ire.followers.push_back(follower);
 
-      ire.comm_status = SUCCESS;
-  } else {
-      ire.comm_status = FAILURE_UNKNOWN;
-  }
+    ire.comm_status = SUCCESS;
+  } 
+  else
+    ire.comm_status = FAILURE_UNKNOWN;
 
   return ire;
 }
 
 // Follow Command        
 IReply Client::Follow(const std::string& username2) {
-
   IReply ire; 
-    
   Request request;
-  request.set_username(this->username);
-  request.add_arguments(username2);
-
   ClientContext context;
   Reply reply;
 
+  // use set_username and add_arguments, which are already by grpc compiler
+  request.set_username(this->username);
+  request.add_arguments(username2);
+
+  // ask the server for a follow function
   grpc::Status status = stub_->Follow(&context, request, &reply);
 
   ire.grpc_status = status;
 
-  if (status.ok()) {
-      if (reply.msg() == "you have already joined") {
-          ire.comm_status = FAILURE_ALREADY_EXISTS;
-      } else if (reply.msg() == "Follow Successful") {
-          ire.comm_status = SUCCESS;
-      } else if (reply.msg() == "Invalid username") {
-          ire.comm_status = FAILURE_INVALID_USERNAME;
-      } else {
-          ire.comm_status = FAILURE_UNKNOWN;
-      }
-  } else {
+  if (status.ok())
+  {
+    if (reply.msg() == "you have already joined")
+      ire.comm_status = FAILURE_ALREADY_EXISTS;
+    else if (reply.msg() == "Follow Successful")
+      ire.comm_status = SUCCESS;
+    else if (reply.msg() == "Invalid username")
+      ire.comm_status = FAILURE_INVALID_USERNAME;
+    else
       ire.comm_status = FAILURE_UNKNOWN;
   }
 
@@ -234,89 +245,115 @@ IReply Client::Follow(const std::string& username2) {
 
 // UNFollow Command  
 IReply Client::UnFollow(const std::string& username2) {
-
   IReply ire;
-
   Request request;
-  request.set_username(this->username);
-  request.add_arguments(username2);
-
   ClientContext context;
   Reply reply;
 
+  request.set_username(this->username);
+  request.add_arguments(username2);
+
+  // ask the server stub for unfollow command
   grpc::Status status = stub_->UnFollow(&context, request, &reply);
 
   ire.grpc_status = status;
 
-  if (status.ok()) {
-    if (reply.msg() == "You are not a follower") {
-      ire.comm_status = FAILURE_NOT_A_FOLLOWER;
-    } else if (reply.msg() == "UnFollow Successful") {
+  if (status.ok())
+  {
+    if (reply.msg() == "you are not a follower")
+      ire.comm_status = FAILURE_ALREADY_EXISTS;
+    else if (reply.msg() == "UnFollow Successful")
       ire.comm_status = SUCCESS;
-    } else {
+    else if (reply.msg() == "Invalid username")
+      ire.comm_status = FAILURE_INVALID_USERNAME; 
+    else
       ire.comm_status = FAILURE_UNKNOWN;
-    }
-  } else {
-    ire.comm_status = FAILURE_UNKNOWN;
   }
 
   return ire;
 }
 
 IReply Client::Login() {
-    IReply ire;
-    Request request;
-    request.set_username(username);
+  IReply ire;
+  Request request;
+  Reply reply;
+  ClientContext context;
+  
+  request.set_username(username);
 
-    Reply reply;
-    ClientContext context;
+  // Call the Login RPC from stub
+  grpc::Status status = stub_->Login(&context, request, &reply);
 
-    // Call the Login RPC
-    grpc::Status status = stub_->Login(&context, request, &reply);
+  ire.grpc_status = status;
 
-    ire.grpc_status = status;
+  if (status.ok())
+  {
+    if (reply.msg() == "you have already joined")
+      ire.comm_status = FAILURE_ALREADY_EXISTS;
+    else
+      ire.comm_status = SUCCESS;
+  }
 
-    if (status.ok()) {
-        ire.comm_status = SUCCESS;
-        if (reply.msg() == "you have already joined") {
-            ire.comm_status = FAILURE_ALREADY_EXISTS;
-        } else {
-            ire.comm_status = SUCCESS;
-        }
-    } else if (status.error_code() == grpc::StatusCode::ALREADY_EXISTS) {
-        ire.comm_status = FAILURE_ALREADY_EXISTS;
-    } else {
-        ire.comm_status = FAILURE_UNKNOWN;
-    }
-
-    return ire;
+  return ire;
 }
 
 
 // Timeline Command
 void Client::Timeline(const std::string& username) {
+  // ------------------------------------------------------------
+  // In this function, you are supposed to get into timeline mode.
+  // You may need to call a service method to communicate with
+  // the server. Use getPostMessage/displayPostMessage functions 
+  // in client.cc file for both getting and displaying messages 
+  // in timeline mode.
+  // ------------------------------------------------------------
 
-    // ------------------------------------------------------------
-    // In this function, you are supposed to get into timeline mode.
-    // You may need to call a service method to communicate with
-    // the server. Use getPostMessage/displayPostMessage functions 
-    // in client.cc file for both getting and displaying messages 
-    // in timeline mode.
-    // ------------------------------------------------------------
-
-    // ------------------------------------------------------------
-    // IMPORTANT NOTICE:
-    //
-    // Once a user enter to timeline mode , there is no way
-    // to command mode. You don't have to worry about this situation,
-    // and you can terminate the client program by pressing
-    // CTRL-C (SIGINT)
-    // ------------------------------------------------------------
+  // ------------------------------------------------------------
+  // IMPORTANT NOTICE:
+  //
+  // Once a user enter to timeline mode , there is no way
+  // to command mode. You don't have to worry about this situation,
+  // and you can terminate the client program by pressing
+  // CTRL-C (SIGINT)
+  // ------------------------------------------------------------
   
-    /***
-    YOUR CODE HERE
-    ***/
+  ClientContext context;
+  std::shared_ptr<grpc::ClientReaderWriter<Message, Message>> stream(
+    stub_->Timeline(&context));
 
+  //thread to read messages from the server
+  std::thread reader([stream, this]() {
+    Message server_msg;
+    // get the message back from the server
+    // infinite loop to read back from derver
+    while (stream->Read(&server_msg)) {
+      std::time_t time = static_cast<std::time_t>(server_msg.timestamp().seconds());
+      displayPostMessage(server_msg.username(), server_msg.msg(), time);
+    }
+  });
+
+  // we need a way to read and write to the server at the same time, so we need to employ some threads
+  // thread to send messages to the server
+  std::thread writer([stream, this]() {
+    // infinite loop to send the msgs
+    while (true) {
+      std::string message = getPostMessage();
+      // use the message struct to define the username (which should be in the server db), 
+      //and the message we want to senf
+      Message msg = MakeMessage(this->username, message);
+      stream->Write(msg);
+    }
+  });
+
+  writer.join();
+  reader.join();
+
+  // Finish the stream
+  //stream->WritesDone();
+  //grpc::Status status = stream->Finish();
+  //if (!status.ok()) {
+  //    std::cerr << "Timeline rpc failed." << std::endl;
+  //}
 }
 
 
@@ -344,7 +381,7 @@ int main(int argc, char** argv) {
     }
   }
       
-  std::cout << "Logging Initialized. Client starting...";
+  // std::cout << "Logging Initialized. Client starting...";
   
   Client myc(hostname, username, port);
   

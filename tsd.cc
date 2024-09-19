@@ -124,19 +124,32 @@ class SNSServiceImpl final : public SNSService::Service {
 
   Status Follow(ServerContext* context, const Request* request, Reply* reply) override {
     std::string username = request->username();
-    std::string username2 = request->arguments(0);
+    std::string username2;
+    if (request->arguments_size() > 0)
+      username2 = request->arguments(0);
+    else 
+    {
+      reply->set_msg("Provide username");
+      return Status::OK;
+    }
 
+    // We assume that these clients exist in our db
     Client*c1 = getClient(username);
     Client*c2 = getClient(username2);
 
-    if (c2 == nullptr) {
+    // if the client does not exist, or if the client trying to follow himself, then return error msg
+    if (c1 == nullptr or c2 == nullptr)
       reply->set_msg("Invalid username");
-    } else if (username == username2) {
+    else if (username == username2)
       reply->set_msg("Invalid username");
-    } else {
-      if (isFollowing(c1, c2)) {
+    else 
+    {
+      // internal func to check if you already followed
+      if (isFollowing(c1, c2))
         reply->set_msg("you have already joined");
-      } else {
+      else
+      {
+        // update the follwoing and follwers db respectively
         c1->client_following.push_back(c2);
         c2->client_followers.push_back(c1);
         reply->set_msg("Follow Successful");
@@ -148,7 +161,14 @@ class SNSServiceImpl final : public SNSService::Service {
 
   Status UnFollow(ServerContext* context, const Request* request, Reply* reply) override {
     std::string username = request->username();
-    std::string username2 = request->arguments(0);
+    std::string username2;
+    if (request->arguments_size() > 0)
+      username2 = request->arguments(0);
+    else 
+    {
+      reply->set_msg("Provide username");
+      return Status::OK;
+    }
 
     Client* c1 = getClient(username);
     Client* c2 = getClient(username2);
@@ -159,17 +179,21 @@ class SNSServiceImpl final : public SNSService::Service {
       return Status::OK;
     }
 
-    if (isFollowing(c1, c2)) {
+    // check if they follow
+    if (isFollowing(c1, c2))
+    {
+      // erase it from both the following and follower db's
       c1->client_following.erase(std::find(c1->client_following.begin(), c1->client_following.end(), c2));
 
       auto it_followers = std::find(c2->client_followers.begin(), c2->client_followers.end(), c1);
-      if (it_followers != c2->client_followers.end()) {
-          c2->client_followers.erase(it_followers);
-      }
+      if (it_followers != c2->client_followers.end())
+        c2->client_followers.erase(it_followers);
+
       reply->set_msg("UnFollow Successful");
-    } else {
-      reply->set_msg("You are not a follower");
-    }
+    } 
+    else
+      reply->set_msg("you are not a follower");   // they do not follow so just return this back to client
+
 
     return Status::OK;
   }
@@ -180,11 +204,9 @@ class SNSServiceImpl final : public SNSService::Service {
     // test 0: Check if the client already exists
     Client* c = getClient(username);
 
+    // if they have already joined, then return, if not, then add them  to the username db and set them to connected
     if (c != nullptr && c->connected)
-    {
-      reply->set_msg("ALREADY JOINED");
-      return Status(grpc::StatusCode::ALREADY_EXISTS, "ALREADY JOINED");
-    } 
+      reply->set_msg("you have already joined");
     else 
     {
       if (c == nullptr) 
@@ -206,16 +228,38 @@ class SNSServiceImpl final : public SNSService::Service {
   }
 
 
-  Status Timeline(ServerContext* context, 
-		ServerReaderWriter<Message, Message>* stream) override {
+  Status Timeline(ServerContext* context, ServerReaderWriter<Message, Message>* stream) override {
+    Message message;
 
-    /*********
-    YOUR CODE HERE
-    **********/
-    
+    // Read messages from the client
+    while (stream->Read(&message))
+    {
+      // Get the client who sent the message
+      Client* sender = getClient(message.username());
+
+      if (sender == nullptr) {
+        continue; // If the sender is not found, skip processing
+      }
+
+      // Set the sender's stream
+      sender->stream = stream;
+
+      // Broadcast the message to all followers of the sender
+      for (Client* follower : sender->client_followers) {
+        if (follower->stream != nullptr) {
+          // Send the message to each follower
+          follower->stream->Write(message);
+        }
+      }
+    }
+
+    // Clean up: remove the sender's stream when done
+    if (Client* sender = getClient(message.username())) {
+      sender->stream = nullptr;
+    }
+
     return Status::OK;
   }
-
 };
 
 void RunServer(std::string port_no) {
