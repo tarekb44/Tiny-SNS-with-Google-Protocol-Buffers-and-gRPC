@@ -67,29 +67,7 @@ private:
   void   Timeline(const std::string &username);
 };
 
-
-///////////////////////////////////////////////////////////
-//
-//////////////////////////////////////////////////////////
-//int Client::connectTo()
-//{
-  // ------------------------------------------------------------
-  // In this function, you are supposed to create a stub so that
-  // you call service methods in the processCommand/porcessTimeline
-  // functions. That is, the stub should be accessible when you want
-  // to call any service methods in those functions.
-  // Please refer to gRpc tutorial how to create a stub.
-  // ------------------------------------------------------------
-    
-///////////////////////////////////////////////////////////
-// YOUR CODE HERE
-//////////////////////////////////////////////////////////
-
-//    return 1;
-//}
-
 int Client::connectTo() {
-    // Create a channel and stub
     std::string connection_info = hostname + ":" + port;
     stub_ = SNSService::NewStub(
         grpc::CreateChannel(connection_info, grpc::InsecureChannelCredentials()));
@@ -177,12 +155,10 @@ IReply Client::processCommand(std::string& input)
     {
       ire = List();
     }
-
-    
-    
-    /*********
-    YOUR CODE HERE
-    **********/
+    else if (command == "UNFOLLOW")
+    {
+      ire = UnFollow(arg);
+    }
 
     return ire;
 }
@@ -259,27 +235,33 @@ IReply Client::Follow(const std::string& username2) {
 // UNFollow Command  
 IReply Client::UnFollow(const std::string& username2) {
 
-    IReply ire;
+  IReply ire;
 
-    /***
-    YOUR CODE HERE
-    ***/
+  Request request;
+  request.set_username(this->username);
+  request.add_arguments(username2);
 
-    return ire;
+  ClientContext context;
+  Reply reply;
+
+  grpc::Status status = stub_->UnFollow(&context, request, &reply);
+
+  ire.grpc_status = status;
+
+  if (status.ok()) {
+    if (reply.msg() == "You are not a follower") {
+      ire.comm_status = FAILURE_NOT_A_FOLLOWER;
+    } else if (reply.msg() == "UnFollow Successful") {
+      ire.comm_status = SUCCESS;
+    } else {
+      ire.comm_status = FAILURE_UNKNOWN;
+    }
+  } else {
+    ire.comm_status = FAILURE_UNKNOWN;
+  }
+
+  return ire;
 }
-
-// Login Command  
-//IReply Client::Login() {
-
-//    IReply ire;
-  
-    /***
-     YOUR CODE HERE
-    ***/
-
-//    return ire;
-//}
-
 
 IReply Client::Login() {
     IReply ire;

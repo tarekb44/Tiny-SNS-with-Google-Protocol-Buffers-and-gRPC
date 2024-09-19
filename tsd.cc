@@ -83,7 +83,19 @@ std::vector<Client*> client_db;
 
 
 class SNSServiceImpl final : public SNSService::Service {
-  
+
+  Client* getClient(const std::string& username) {
+    for (Client* client : client_db)
+      if (client->username == username)
+        return client;
+
+    return nullptr;
+  }
+
+  bool isFollowing(Client* client, Client* target) {
+    return std::find(client->client_following.begin(), client->client_following.end(), target) != client->client_following.end();
+  }
+
   Status List(ServerContext* context, const Request* request, ListReply* list_reply) override {
     std::string username = request->username();
     Client* c = nullptr;
@@ -111,43 +123,57 @@ class SNSServiceImpl final : public SNSService::Service {
   }
 
   Status Follow(ServerContext* context, const Request* request, Reply* reply) override {
-    std::string username = request->username();  // The user making the request
-    std::string username_to_follow = request->arguments(0);  // The user to follow
+    std::string username = request->username();
+    std::string username2 = request->arguments(0);
 
-    Client* client = getClient(username);
-    Client* target = getClient(username_to_follow);
+    Client*c1 = getClient(username);
+    Client*c2 = getClient(username2);
 
-    if (target == nullptr) {
-        reply->set_msg("Invalid username");
-    } else if (username == username_to_follow) {
-        reply->set_msg("Invalid username");
+    if (c2 == nullptr) {
+      reply->set_msg("Invalid username");
+    } else if (username == username2) {
+      reply->set_msg("Invalid username");
     } else {
-        if (std::find(client->client_following.begin(), client->client_following.end(), target) != client->client_following.end()) {
-            reply->set_msg("you have already joined");
-        } else {
-            client->client_following.push_back(target);
-            target->client_followers.push_back(client);
-            reply->set_msg("Follow Successful");
-        }
+      if (isFollowing(c1, c2)) {
+        reply->set_msg("you have already joined");
+      } else {
+        c1->client_following.push_back(c2);
+        c2->client_followers.push_back(c1);
+        reply->set_msg("Follow Successful");
+      }
     }
 
     return Status::OK;
   }
 
   Status UnFollow(ServerContext* context, const Request* request, Reply* reply) override {
+    std::string username = request->username();
+    std::string username2 = request->arguments(0);
+
+    Client* c1 = getClient(username);
+    Client* c2 = getClient(username2);
+   
+    if (c1 == nullptr or c2 == nullptr)
+    {
+      reply->set_msg("Invalid username");
+      return Status::OK;
+    }
+
+    if (isFollowing(c1, c2)) {
+      c1->client_following.erase(std::find(c1->client_following.begin(), c1->client_following.end(), c2));
+
+      auto it_followers = std::find(c2->client_followers.begin(), c2->client_followers.end(), c1);
+      if (it_followers != c2->client_followers.end()) {
+          c2->client_followers.erase(it_followers);
+      }
+      reply->set_msg("UnFollow Successful");
+    } else {
+      reply->set_msg("You are not a follower");
+    }
+
     return Status::OK;
-
   }
 
-  Client* getClient(const std::string& username) {
-    for (Client* client : client_db)
-      if (client->username == username)
-        return client;
-
-    return nullptr;
-  }
-
-  // RPC Login
   Status Login(ServerContext* context, const Request* request, Reply* reply) override {
     std::string username = request->username();
     
