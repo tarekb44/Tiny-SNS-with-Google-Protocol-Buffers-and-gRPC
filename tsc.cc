@@ -84,51 +84,6 @@ int Client::connectTo() {
 
 IReply Client::processCommand(std::string& input)
 {
-  // ------------------------------------------------------------
-  // GUIDE 1:
-  // In this function, you are supposed to parse the given input
-  // command and create your own message so that you call an 
-  // appropriate service method. The input command will be one
-  // of the followings:
-  //
-  // FOLLOW <username>
-  // UNFOLLOW <username>
-  // LIST
-  // TIMELINE
-  // ------------------------------------------------------------
-  
-  // ------------------------------------------------------------
-  // GUIDE 2:
-  // Then, you should create a variable of IReply structure
-  // provided by the client.h and initialize it according to
-  // the result. Finally you can finish this function by returning
-  // the IReply.
-  // ------------------------------------------------------------
-  
-  
-  // ------------------------------------------------------------
-  // HINT: How to set the IReply?
-  // Suppose you have "FOLLOW" service method for FOLLOW command,
-  // IReply can be set as follow:
-  // 
-  //     // some codes for creating/initializing parameters for
-  //     // service method
-  //     IReply ire;
-  //     grpc::Status status = stub_->FOLLOW(&context, /* some parameters */);
-  //     ire.grpc_status = status;
-  //     if (status.ok()) {
-  //         ire.comm_status = SUCCESS;
-  //     } else {
-  //         ire.comm_status = FAILURE_NOT_EXISTS;
-  //     }
-  //     
-  //      return ire;
-  // 
-  // IMPORTANT: 
-  // For the command "LIST", you should set both "all_users" and 
-  // "following_users" member variable of IReply.
-  // ------------------------------------------------------------
-
     IReply ire;
 
     // std::cout << "Cmd" << input << std::endl;
@@ -300,23 +255,6 @@ IReply Client::Login() {
 
 // Timeline Command
 void Client::Timeline(const std::string& username) {
-  // ------------------------------------------------------------
-  // In this function, you are supposed to get into timeline mode.
-  // You may need to call a service method to communicate with
-  // the server. Use getPostMessage/displayPostMessage functions 
-  // in client.cc file for both getting and displaying messages 
-  // in timeline mode.
-  // ------------------------------------------------------------
-
-  // ------------------------------------------------------------
-  // IMPORTANT NOTICE:
-  //
-  // Once a user enter to timeline mode , there is no way
-  // to command mode. You don't have to worry about this situation,
-  // and you can terminate the client program by pressing
-  // CTRL-C (SIGINT)
-  // ------------------------------------------------------------
-  
   ClientContext context;
   std::shared_ptr<grpc::ClientReaderWriter<Message, Message>> stream(
     stub_->Timeline(&context));
